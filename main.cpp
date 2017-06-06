@@ -1,12 +1,6 @@
-/*
- * soc.c - program to open sockets to remote machines
- *
- * $Author: kensmith $
- * $Id: soc.c 6 2009-07-03 03:18:54Z kensmith $
- */
-
-static char svnid[] = "$Id: soc.c 6 2009-07-03 03:18:54Z kensmith $";
-
+//
+// Created by  Gmyth on 17/6/5.
+//
 #define	BUF_LEN	8192
 
 #include	<stdio.h>
@@ -17,6 +11,7 @@ static char svnid[] = "$Id: soc.c 6 2009-07-03 03:18:54Z kensmith $";
 #include	<sys/socket.h>
 #include	<netdb.h>
 #include    <getopt.h>
+#include    <string>
 #include	<netinet/in.h>
 #include	<inttypes.h>
 
@@ -29,8 +24,17 @@ int setup_server();
 
 int s, sock, ch, server, done, bytes, aflg;
 int soctype = SOCK_STREAM;
+int queuing_time = 60;
+int thread_num = 4;
 char *host = NULL;
 char *port = NULL;
+
+// all flags
+bool debugging = false;
+bool NOT_FCFS = false;
+
+
+
 extern char *optarg;
 extern int optind;
 
@@ -52,26 +56,52 @@ main(int argc,char *argv[])
         progname++;
     while ((ch = getopt(argc, argv, "adsp:h:")) != -1)
         switch(ch) {
-            case 'a':
-                aflg++;		/* print address in output */
-                break;
             case 'd':
-                soctype = SOCK_DGRAM;
+                // entering the debug mode
+                debugging = true;
                 break;
-            case 's':
-                server = 1;
+            case 't':
+                // Set the queuing time to time seconds. The default should be 60 seconds
+
+                // make sure the arg is an integer
+                queuing_time = std::stoi(optarg);
                 break;
             case 'p':
+                // Listen on the given port. If not provided, myhttpd will listen on port 8080.
                 port = optarg;
                 break;
-            case 'h':
-                host = optarg;
+            case 'n':
+                /*
+                 * Set number of threads waiting ready in the execution thread pool to threadnum.
+                 * The default should be 4 execution threads.
+                 */
+                // syntax check needed here
+                thread_num = std::stoi(optarg);
                 break;
-            case '?':
+            case 's':
+                // Set the scheduling policy. It can be either FCFS or SJF. The default will be FCFS.
+                char* mode;
+                mode = optarg;
+                if(strcmp (mode,"SJF") == 0){
+                    NOT_FCFS = true;
+                }
+                break;
+            case 'h':
+                // print usage with all the option and exit
+                usage();
+                exit(1);
+                break;
+            case 'l':
+                // Log all requests to the given file.
+                //function needed
+                break;
+            case 'r':
+                // Set the root directory for the http server to dir.
+                break;
             default:
                 usage();
         }
-    argc -= optind;
+    argc -= optind; // reduces the argument number by optind
     if (argc != 0)
         usage();
     if (!server && (host == NULL || port == NULL))
@@ -85,10 +115,10 @@ main(int argc,char *argv[])
         perror("socket");
         exit(1);
     }
-    if (!server)
-        sock = setup_client();
-    else
-        sock = setup_server();
+//    if (!server)
+//        sock = setup_client();
+//    else
+    sock = setup_server();
 /*
  * Set up select(2) on both socket and terminal, anything that comes
  * in on socket goes to terminal, anything that gets typed on terminal
@@ -122,52 +152,6 @@ main(int argc,char *argv[])
         }
     }
     return(0);
-}
-
-/*
- * setup_client() - set up socket for the mode of soc running as a
- *		client connecting to a port on a remote machine.
- */
-
-int
-setup_client() {
-
-    struct hostent *hp;
-    struct sockaddr_in serv;
-    struct servent *se;
-
-/*
- * Look up name of remote machine, getting its address.
- */
-    if ((hp = ::gethostbyname(host)) == NULL) {
-        fprintf(stderr, "%s: %s unknown host\n", progname, host);
-        exit(1);
-    }
-/*
- * Set up the information needed for the socket to be bound to a socket on
- * a remote host.  Needs address family to use, the address of the remote
- * host (obtained above), and the port on the remote host to connect to.
- */
-    serv.sin_family = AF_INET;
-    memcpy(&serv.sin_addr, hp->h_addr, hp->h_length);
-    if (isdigit(*port))
-        serv.sin_port = htons(atoi(port));
-    else {
-        if ((se = getservbyname(port, (char *)NULL)) < (struct servent *) 0) {
-            perror(port);
-            exit(1);
-        }
-        serv.sin_port = se->s_port;
-    }
-/*
- * Try to connect the sockets...
- */
-    if (connect(s, (struct sockaddr *) &serv, sizeof(serv)) < 0) {
-        perror("connect");
-        exit(1);
-    } else
-        fprintf(stderr, "Connected...\n");
-    return(s);
 }
 
 /*
@@ -219,6 +203,7 @@ setup_server() {
 void
 usage()
 {
+    // change this to new usage
     fprintf(stderr, "usage: %s -h host -p port\n", progname);
     fprintf(stderr, "usage: %s -s [-p port]\n", progname);
     exit(1);
