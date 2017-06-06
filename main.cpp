@@ -21,6 +21,7 @@ char buf[BUF_LEN];
 void usage();
 int setup_client();
 int setup_server();
+int req_parser(char buffer[]);
 
 int s, sock, ch, server, done, bytes, aflg;
 int soctype = SOCK_STREAM;
@@ -28,6 +29,16 @@ int queuing_time = 60;
 int thread_num = 4;
 char *host = NULL;
 char *port = NULL;
+
+struct request
+{
+    char *time_arrival;
+    char *serverName;
+    int  content_size;
+    char *file_dir;
+    char *content_type;
+    char *last_modified;
+};
 
 // all flags
 bool debugging = false;
@@ -56,6 +67,9 @@ main(int argc,char *argv[])
         progname++;
     while ((ch = getopt(argc, argv, "adsp:h:")) != -1)
         switch(ch) {
+            case 'fun':
+                // entering the debug mode
+                break;
             case 'd':
                 // entering the debug mode
                 debugging = true;
@@ -104,10 +118,10 @@ main(int argc,char *argv[])
     argc -= optind; // reduces the argument number by optind
     if (argc != 0)
         usage();
-    if (!server && (host == NULL || port == NULL))
-        usage();
-    if (server && host != NULL)
-        usage();
+//    if (!server && (host == NULL || port == NULL))
+//        usage();
+//    if (server && host != NULL)
+//        usage();
 /*
  * Create socket on local host.
  */
@@ -149,6 +163,12 @@ main(int argc,char *argv[])
                         0xff & (unsigned int)fromaddr.bytes[3]);
             }
             write(fileno(stdout), buf, bytes);
+            buf[strlen(buf) - 1] = '\0';
+            printf("++++%s++++",buf);
+            if(strcmp(buf,"exit")==0){
+                exit(1);
+            }
+            req_parser(buf);
         }
     }
     return(0);
@@ -196,6 +216,66 @@ setup_server() {
     return(newsock);
 }
 
+
+/*
+ * parse the incoming request, maintian information
+ *
+ */
+ int
+ req_parser(char buffer[]){
+    FILE *in;
+    printf("Buffer with:\"%s\"", buffer);
+    char *Request_type = strtok(buffer," ");
+    char *dir;
+    char *type;
+    time_t now;
+    time(&now);
+    struct tm * Current=localtime(&now);
+    int size;
+    printf("ck 1");
+    if(Request_type == NULL){
+        Request_type = strtok(NULL," ");
+    }else{
+        if(strcmp(Request_type,"GET")==0 || strcmp(Request_type,"HEAD")==0){
+            dir = strtok(NULL," ");
+            type = strtok(dir,".");
+            printf("came to here");
+            if(type==NULL){
+                printf("unsuportted file type");
+                return 3; // unsuportted file
+            }
+            if(strcmp(type,"html")==0){
+                type = "text/html";
+            }else if(strcmp(type,"gif")==0){
+                type = "image/gif";
+            }else{
+                printf("unsuportted file type");
+                return 3;//no file
+            }
+            in = fopen(dir,"r");//in read mode
+            if(in == NULL){
+                printf("Unable to open file");
+                return 2;//no file
+            }
+            fseek(in, 0, SEEK_END); // seek to end of file
+            int size = ftell(in);
+            char *current_ts;
+            printf("content size:\"%d\" \n", size);
+            strftime(current_ts, sizeof current_ts, "[%d/%b/%Y : %H:%M:%S %z]", Current);
+            printf("time stamp:\"%s\" \n", current_ts);
+            struct request new_request;
+            new_request.content_size = size;
+            new_request.content_type = type;
+            new_request.file_dir = dir;
+            new_request.last_modified = current_ts;
+            new_request.serverName="Hello world muilti-thread server";
+            new_request.time_arrival = current_ts;
+        }else{
+            // wrong request type
+            return 1;// 1 is the err code for req_parser can't find correct tyoe
+        }
+    }
+ }
 /*
  * usage - print usage string and exit
  */
