@@ -14,3 +14,9 @@ CMakeLists.txt
 .idea/CSE_421_WebServer.iml
 
 .idea/.name
+
+Client-test/.idea/.name
+
+*.iml
+
+*.xml
