@@ -32,12 +32,12 @@ char *port = NULL;
 
 struct request
 {
-    char *time_arrival;
+    char time_arrival[250];
     char *serverName;
     int  content_size;
     char *file_dir;
     char *content_type;
-    char *last_modified;
+    char last_modified[250];
 };
 
 // all flags
@@ -67,9 +67,6 @@ main(int argc,char *argv[])
         progname++;
     while ((ch = getopt(argc, argv, "adsp:h:")) != -1)
         switch(ch) {
-            case 'fun':
-                // entering the debug mode
-                break;
             case 'd':
                 // entering the debug mode
                 debugging = true;
@@ -164,11 +161,13 @@ main(int argc,char *argv[])
             }
             write(fileno(stdout), buf, bytes);
             buf[strlen(buf) - 1] = '\0';
-            printf("++++%s++++",buf);
+            //buf[strlen(buf)] = '\n';
             if(strcmp(buf,"exit")==0){
                 exit(1);
             }
             req_parser(buf);
+
+            exit(1);
         }
     }
     return(0);
@@ -223,23 +222,35 @@ setup_server() {
  */
  int
  req_parser(char buffer[]){
+    printf("New Request detected, start parsing process....");
     FILE *in;
-    printf("Buffer with:\"%s\"", buffer);
     char *Request_type = strtok(buffer," ");
-    char *dir;
+    char *dir = strtok(NULL," ");
+    char *def = "/Users/gmyth/Desktop/CSE_421_WebServer"; // this one need to change, i will pust this into config file
     char *type;
     time_t now;
     time(&now);
     struct tm * Current=localtime(&now);
-    int size;
-    printf("ck 1");
+    //printf("\nck 1");
     if(Request_type == NULL){
         Request_type = strtok(NULL," ");
     }else{
+       // printf("\nRequest_type: \"%s\"",Request_type);
         if(strcmp(Request_type,"GET")==0 || strcmp(Request_type,"HEAD")==0){
-            dir = strtok(NULL," ");
-            type = strtok(dir,".");
-            printf("came to here");
+           // printf("\nck 2");
+            char *temp = (char *)malloc(strlen(dir)+strlen(def)+1);
+            strcpy(temp,def);
+            strcat(temp,dir);
+            //printf("\ntemp: \"%s\"",temp);
+            in = fopen(temp,"r");//in read mode
+            if(in == NULL){
+                printf("Unable to open file");
+                return 2;//no file
+            }
+            strtok(dir,".");
+            type =strtok(NULL,".");
+            //printf("\ncame to here");
+            //printf("\ntype: \"%s\"",type);
             if(type==NULL){
                 printf("unsuportted file type");
                 return 3; // unsuportted file
@@ -252,24 +263,32 @@ setup_server() {
                 printf("unsuportted file type");
                 return 3;//no file
             }
-            in = fopen(dir,"r");//in read mode
-            if(in == NULL){
-                printf("Unable to open file");
-                return 2;//no file
-            }
+
             fseek(in, 0, SEEK_END); // seek to end of file
             int size = ftell(in);
-            char *current_ts;
-            printf("content size:\"%d\" \n", size);
-            strftime(current_ts, sizeof current_ts, "[%d/%b/%Y : %H:%M:%S %z]", Current);
-            printf("time stamp:\"%s\" \n", current_ts);
+            char current_ts[250];
+            //printf("\ncontent size:\"%d\"", size);
+            strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+            //printf("\ntime stamp:\"%s\"", current_ts);
             struct request new_request;
             new_request.content_size = size;
             new_request.content_type = type;
-            new_request.file_dir = dir;
-            new_request.last_modified = current_ts;
+            new_request.file_dir = temp;
+            strcpy(new_request.last_modified ,current_ts);
             new_request.serverName="Hello world muilti-thread server";
-            new_request.time_arrival = current_ts;
+            strcpy(new_request.time_arrival , current_ts);
+//            free(in);
+//            free(type);
+//            free(Request_type);
+//            free(dir);
+//            free(def);
+//            free(temp);
+            printf("\nRequest content_size: \"%d\"",new_request.content_size);
+            printf("\nRequest content_type: \"%s\"",new_request.content_type);
+            printf("\nRequest file_dir: \"%s\"",new_request.file_dir);
+            printf("\nRequest last_modified: \"%s\"",new_request.last_modified);
+            printf("\nRequest serverName: \"%s\"",new_request.serverName);
+            printf("\nRequest time_arrival: \"%s\"",new_request.time_arrival);
         }else{
             // wrong request type
             return 1;// 1 is the err code for req_parser can't find correct tyoe
