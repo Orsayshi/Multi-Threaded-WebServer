@@ -11,8 +11,10 @@
 #include	<sys/socket.h>
 #include	<netdb.h>
 #include    <getopt.h>
+#include    <time.h>
 #include	<netinet/in.h>
 #include	<inttypes.h>
+
 
 char *progname;
 char buf[BUF_LEN];
@@ -74,7 +76,7 @@ main(int argc,char *argv[])
                 // Set the queuing time to time seconds. The default should be 60 seconds
 
                 // make sure the arg is an integer
-                queuing_time = std::stoi(optarg);
+                queuing_time = atoi(optarg);
                 break;
             case 'p':
                 // Listen on the given port. If not provided, myhttpd will listen on port 8080.
@@ -86,7 +88,7 @@ main(int argc,char *argv[])
                  * The default should be 4 execution threads.
                  */
                 // syntax check needed here
-                thread_num = std::stoi(optarg);
+                thread_num = atoi(optarg);
                 break;
             case 's':
                 // Set the scheduling policy. It can be either FCFS or SJF. The default will be FCFS.
@@ -225,7 +227,7 @@ setup_server() {
     FILE *in;
     char *Request_type = strtok(buffer," ");
     char *dir = strtok(NULL," ");
-    char *def = "/Users/gmyth/Desktop/CSE_421_WebServer"; // this one need to change, i will pust this into config file
+    char *def = (char*)"/Users/gmyth/Desktop/CSE_421_WebServer"; // this one need to change, i will pust this into config file
     char *type;
     time_t now;
     time(&now);
@@ -255,9 +257,9 @@ setup_server() {
                 return 3; // unsuportted file
             }
             if(strcmp(type,"html")==0){
-                type = "text/html";
+                type = (char*)"text/html";
             }else if(strcmp(type,"gif")==0){
-                type = "image/gif";
+                type = (char*)"image/gif";
             }else{
                 printf("unsuportted file type");
                 return 3;//no file
@@ -274,7 +276,7 @@ setup_server() {
             new_request.content_type = type;
             new_request.file_dir = temp;
             strcpy(new_request.last_modified ,current_ts);
-            new_request.serverName="Hello world muilti-thread server";
+            new_request.serverName=(char*)"Hello world muilti-thread server";
             strcpy(new_request.time_arrival , current_ts);
 //            free(in);
 //            free(type);
@@ -293,6 +295,7 @@ setup_server() {
             return 1;// 1 is the err code for req_parser can't find correct tyoe
         }
     }
+    return -1;
  }
 /*
  * usage - print usage string and exit
