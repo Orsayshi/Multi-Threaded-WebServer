@@ -11,9 +11,12 @@
 #include	<sys/socket.h>
 #include	<netdb.h>
 #include    <getopt.h>
-#include    <string>
+#include    <time.h>
+#include  <errno.h>
+//#include    <sys/sendfile.h>
 #include	<netinet/in.h>
 #include	<inttypes.h>
+
 
 char *progname;
 char buf[BUF_LEN];
@@ -22,6 +25,7 @@ void usage();
 int setup_client();
 int setup_server();
 int req_parser(char buffer[]);
+int request_handler(struct request rq);
 
 int s, sock, ch, server, done, bytes, aflg;
 int soctype = SOCK_STREAM;
@@ -32,6 +36,7 @@ char *port = NULL;
 
 struct request
 {
+    char *request_type;
     char time_arrival[250];
     char *serverName;
     int  content_size;
@@ -75,7 +80,7 @@ main(int argc,char *argv[])
                 // Set the queuing time to time seconds. The default should be 60 seconds
 
                 // make sure the arg is an integer
-                queuing_time = std::stoi(optarg);
+                queuing_time = atoi(optarg);
                 break;
             case 'p':
                 // Listen on the given port. If not provided, myhttpd will listen on port 8080.
@@ -87,7 +92,7 @@ main(int argc,char *argv[])
                  * The default should be 4 execution threads.
                  */
                 // syntax check needed here
-                thread_num = std::stoi(optarg);
+                thread_num = atoi(optarg);
                 break;
             case 's':
                 // Set the scheduling policy. It can be either FCFS or SJF. The default will be FCFS.
@@ -160,14 +165,12 @@ main(int argc,char *argv[])
                         0xff & (unsigned int)fromaddr.bytes[3]);
             }
             write(fileno(stdout), buf, bytes);
-            buf[strlen(buf) - 1] = '\0';
-            //buf[strlen(buf)] = '\n';
-            if(strcmp(buf,"exit")==0){
+            buf[bytes - 1] = '\0';
+           // printf("current:--------%s---------\n",buf);
+            if(strcasecmp((char *)buf,"exit")==0){
                 exit(1);
             }
             req_parser(buf);
-
-            exit(1);
         }
     }
     return(0);
@@ -223,10 +226,13 @@ setup_server() {
  int
  req_parser(char buffer[]){
     printf("New Request detected, start parsing process....");
+    if(strcmp(buffer,"exit")==0){
+        exit(1);
+    }
     FILE *in;
     char *Request_type = strtok(buffer," ");
     char *dir = strtok(NULL," ");
-    char *def = "/Users/gmyth/Desktop/CSE_421_WebServer"; // this one need to change, i will pust this into config file
+    char *def = (char*)"/Users/gmyth/Desktop/CSE_421_WebServer"; // this one need to change, i will pust this into config file
     char *type;
     time_t now;
     time(&now);
@@ -234,7 +240,12 @@ setup_server() {
     //printf("\nck 1");
     if(Request_type == NULL){
         Request_type = strtok(NULL," ");
-    }else{
+    }
+    if(Request_type == NULL){
+        write(sock,"\nunsuportted request type\n",26);
+        return 5;
+    }
+    else{
        // printf("\nRequest_type: \"%s\"",Request_type);
         if(strcmp(Request_type,"GET")==0 || strcmp(Request_type,"HEAD")==0){
            // printf("\nck 2");
@@ -244,7 +255,7 @@ setup_server() {
             //printf("\ntemp: \"%s\"",temp);
             in = fopen(temp,"r");//in read mode
             if(in == NULL){
-                printf("Unable to open file");
+                write(sock,"\nUnable to open file\n",21);
                 return 2;//no file
             }
             strtok(dir,".");
@@ -252,20 +263,20 @@ setup_server() {
             //printf("\ncame to here");
             //printf("\ntype: \"%s\"",type);
             if(type==NULL){
-                printf("unsuportted file type");
+                write(sock,"\nunsuportted file type\n",23);
                 return 3; // unsuportted file
             }
             if(strcmp(type,"html")==0){
-                type = "text/html";
+                type = (char*)"text/html";
             }else if(strcmp(type,"gif")==0){
-                type = "image/gif";
+                type = (char*)"image/gif";
             }else{
-                printf("unsuportted file type");
+                write(sock,"\nunsuportted file type\n",23);
                 return 3;//no file
             }
-
             fseek(in, 0, SEEK_END); // seek to end of file
             int size = ftell(in);
+            fclose(in);
             char current_ts[250];
             //printf("\ncontent size:\"%d\"", size);
             strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
@@ -275,26 +286,96 @@ setup_server() {
             new_request.content_type = type;
             new_request.file_dir = temp;
             strcpy(new_request.last_modified ,current_ts);
-            new_request.serverName="Hello world muilti-thread server";
+            new_request.serverName=(char*)"Hello world muilti-thread server";
             strcpy(new_request.time_arrival , current_ts);
+            new_request.request_type = Request_type;
 //            free(in);
 //            free(type);
 //            free(Request_type);
 //            free(dir);
 //            free(def);
 //            free(temp);
+            printf("\nRequest_type: \"%s\"",new_request.request_type);
             printf("\nRequest content_size: \"%d\"",new_request.content_size);
             printf("\nRequest content_type: \"%s\"",new_request.content_type);
             printf("\nRequest file_dir: \"%s\"",new_request.file_dir);
             printf("\nRequest last_modified: \"%s\"",new_request.last_modified);
             printf("\nRequest serverName: \"%s\"",new_request.serverName);
             printf("\nRequest time_arrival: \"%s\"",new_request.time_arrival);
+           // test code, call response in here
+            request_handler(new_request);
         }else{
             // wrong request type
+            write(sock,"\nwrong request type\n",20);
             return 1;// 1 is the err code for req_parser can't find correct tyoe
         }
     }
+    return 0;
  }
+
+int request_handler(struct request rq){
+    //int status = 400;
+    char buf [200];
+    time_t now;
+    time(&now);
+    struct tm * Current=localtime(&now);
+    char current_ts[250];
+    //printf("\ncontent size:\"%d\"", size);
+    strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+    if(strcmp(rq.request_type,"GET")==0){
+        // GET response
+        FILE* in;
+        //get file by directory, since the directory is already checked in parser function, no need re-check here
+        in = fopen(rq.file_dir,"r");
+        char length_buffer[20];
+        strcpy(rq.last_modified ,current_ts);
+        sprintf(length_buffer,"%d",rq.content_size); // convert int to char
+        write(sock,"\n",1);
+        write(sock,"Hello world muilti-thread server\n",33);
+        write(sock,"HTTP/1.1 200 OK\n",16);
+        write(sock,"Last Modified: ",15);
+        write(sock,rq.last_modified,strlen(rq.last_modified));
+        write(sock,"\nContent-Type: text/html\n",24);
+        write(sock,"\n",1);
+        write(sock,"Content Length: ",16);
+        write(sock,length_buffer,strlen(length_buffer));
+        write(sock,"\n",1);
+        write(sock,"------------------------------\n",31);
+        //sendfile(sock,fileno(in),NULL,sizeof(buf)); one for linux
+        int check = sendfile(fileno(in),sock,0,(off_t *)length_buffer,NULL,0); // this one only work under mac OS
+        if(check!=0){
+            printf("s:%d\n",errno);
+            printf("Oh dear, something went wrong with sendfile()! %s\n", strerror(errno));
+        }
+        write(sock,"\n------------------------------\n",32);
+        fclose(in);
+        return 0;
+    }else if(strcmp(rq.request_type,"HEAD")==0){
+        // HEAD response
+        FILE* in;
+        //get file by directory, since the directory is already checked in parser function, no need re-check here
+        in = fopen(rq.file_dir,"r");
+        char length_buffer[20];
+        strcpy(rq.last_modified ,current_ts);
+        sprintf(length_buffer,"%d",rq.content_size);
+        write(sock,"\n",1);
+        write(sock,"Hello world muilti-thread server\n",33);
+        write(sock,"HTTP/1.1 200 OK\n",16);
+        write(sock,"Date: ",6);
+        write(sock,rq.time_arrival,strlen(rq.time_arrival));
+        write(sock,"\nLast Modified: ",16);
+        write(sock,rq.last_modified,strlen(rq.last_modified));
+        write(sock,"\nContent-Type: text/html\n",24);
+        write(sock,"\n",1);
+        write(sock,"Content Length: ",16);
+        write(sock,length_buffer,strlen(length_buffer));
+        write(sock,"\n",1);
+        fclose(in);
+        return 0;
+    }
+    return -1;
+}
+
 /*
  * usage - print usage string and exit
  */
