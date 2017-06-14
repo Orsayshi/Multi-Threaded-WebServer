@@ -16,9 +16,10 @@ static char svnid[] = "$Id: soc.c 6 2009-07-03 03:18:54Z kensmith $";
 #include	<sys/types.h>
 #include	<sys/socket.h>
 #include	<netdb.h>
-#include    <getopt.h>
+#include  <getopt.h>
 #include	<netinet/in.h>
 #include	<inttypes.h>
+#include  <unistd.h>
 
 char *progname;
 char buf[BUF_LEN];
