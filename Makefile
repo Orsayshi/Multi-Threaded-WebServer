@@ -1,2 +1,2 @@
-myhttpd: main.cpp
-	g++ -o myhttpd main.cpp
+all:
+	g++ main.cpp -o myhttpd
