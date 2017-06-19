@@ -32,7 +32,10 @@ void *listenning(void *);
 void enqueue(struct request *rq);
 void get_shortest_job();
 int queue_size();
-int req_parser(char buffer[]);
+void file_log(char *info);
+void send_err_feedback();
+void queue_err_feedback(struct invalid_request *rq);
+int req_parser(char buffer[], char ip[]);
 int request_handler(struct request *rq);
 
 int s, sock, ch, server, done, bytes, aflg;
@@ -40,12 +43,14 @@ int soctype = SOCK_STREAM;
 int queuing_time = 60;
 int threads = 4;
 char *mode;
+char *log_file = NULL;
 char dir_buf[1000];
 char *host = NULL;
 char *port = NULL;
-char *root = NULL;
+char *root = getcwd(dir_buf,1000);
 sem_t *sem;
 struct request *head = NULL;
+struct invalid_request *errhead = NULL;
 pthread_t scheduler_id,service_id,listen_id;
 struct request *ready_rq = NULL;
 
@@ -56,14 +61,27 @@ pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 
 struct request
 {
+    char ip[300];
     char *request_type;
     char time_arrival[250];
     char *serverName;
     int  content_size;
+    char content[601];
     char file_dir[601];
     char *content_type;
     char last_modified[250];
     struct request *tail;
+};
+
+struct invalid_request
+{
+    char ip_address[300];
+    char time_arrival[250];
+    char *serverName;
+    char *msg;
+    char content[300];
+    char last_modified[250];
+    struct invalid_request *tail;
 };
 
 // all flags
@@ -81,7 +99,7 @@ main(int argc,char *argv[]) {
         progname = argv[0];
     else
         progname++;
-    while ((ch = getopt(argc, argv, "dt:p:n:s:hlr:")) != -1)
+    while ((ch = getopt(argc, argv, "dt:p:n:s:hr:l:")) != -1)
         switch (ch) {
             case 'd':
                 // entering the debug mode
@@ -120,12 +138,22 @@ main(int argc,char *argv[]) {
             case 'l':
                 // Log all requests to the given file.
                 //function needed
+                log_file = optarg;
+                if(log_file[0]!='/'){
+                    log_file = log_file -1;
+                }
+                log_file[0]='/';
+                char temp[1000];
+                strcpy(temp,root);
+                strcat(temp,log_file);
+                strcpy(log_file,temp);
                 break;
             case 'r':
                 // Set the root directory for the http server to dir.
                 root = optarg;
                 if(chdir(root)<0){
                     fprintf(stderr,"Unvalid working directory %s\n",root);
+                    root = getcwd(dir_buf,1000);
                 }
                 printf("Current working dircetory is %s\n",getcwd(dir_buf,1000));
                 break;
@@ -207,13 +235,19 @@ void *listenning(void *nulptr){
                         0xff & (unsigned int)fromaddr.bytes[2],
                         0xff & (unsigned int)fromaddr.bytes[3]);
             }
-            write(fileno(stdout), buf, bytes);
-            buf[bytes - 1] = '\0';
+            //cwrite(fileno(stdout), buf, bytes);
+           // buf[bytes - 1] = '\0';
            // printf("current:--------%s---------\n",buf);
-            if(strcasecmp((char *)buf,"exit")==0){
-                exit(1);
-            }
-            req_parser(buf);
+//            if(strcasecmp((char *)buf,"exit")==0){
+//                exit(1);
+//            }
+            char ip[300];
+            fromaddr.addr = ntohl(msgfrom.sin_addr.s_addr);
+            sprintf(ip, "%d.%d.%d.%d: ", 0xff & (unsigned int)fromaddr.bytes[0],
+                    0xff & (unsigned int)fromaddr.bytes[1],
+                    0xff & (unsigned int)fromaddr.bytes[2],
+                    0xff & (unsigned int)fromaddr.bytes[3]);
+            req_parser(buf,ip);
         }
     }
     return(0);
@@ -331,6 +365,7 @@ void *scheduling(void *no_FCFS){
                 sleep(1);
             }
         }
+        send_err_feedback();
        printf("\nQueue gets empty...\n");
    }
 }
@@ -346,7 +381,6 @@ void enqueue(struct request *rq){
         while(NULL!=temp->tail){
             temp = temp->tail;
         }
-        printf("\nRequest file_dir: \"%s\"",temp->file_dir);
         temp->tail = rq;
     }
     printf("\nnew request added, now size is: %d \n",queue_size());
@@ -356,17 +390,16 @@ void enqueue(struct request *rq){
  *
  */
 int
-req_parser(char buffer[]){
+req_parser(char buffer[], char ip[]){
     printf("New Request detected, start parsing process....");
-    if(strcmp(buffer,"exit")==0){
-        exit(1);
-    }
     FILE *in;
+    char content[300];
+    strcpy(content,buffer);
     char *Request_type = strtok(buffer," ");
     char *dir = strtok(NULL," ");
     char temp[1300];
     char dir_1[1300];
-    strcpy(temp,getcwd(dir_buf,1000));
+    strcpy(temp,root);
     if(dir != NULL){
         strcpy(dir_1,dir);
         if(dir_1[0]=='~'){
@@ -378,7 +411,7 @@ req_parser(char buffer[]){
         }
     }
 
-    printf("\nstring: %s",temp);
+   // printf("\nstring: %s",temp);
     char *type;
     time_t now;
     time(&now);
@@ -388,7 +421,20 @@ req_parser(char buffer[]){
         Request_type = strtok(NULL," ");
     }
     if(Request_type == NULL){
-        write(sock,"\nunsuportted request type\n",26);
+        struct invalid_request *current;
+        char current_ts[250];
+        //printf("\ncontent size:\"%d\"", size);
+        strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+        current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
+        strcpy(current->ip_address,ip);
+        strcpy(current->content,content);
+        strcpy(current->time_arrival,current_ts);
+        strcpy(current->last_modified,current_ts);
+        current->serverName=(char*)"Hello world muilti-thread server";
+        current->msg = (char*)"\nUnsuportted request type\n";
+        current->tail = NULL;
+        queue_err_feedback(current);
+        //write(sock,"\nunsuportted request type\n",26);
         return 5;
     }
     else{
@@ -401,7 +447,19 @@ req_parser(char buffer[]){
             //printf("\ntemp: \"%s\"",temp);
             in = fopen(temp,"r");//in read mode
             if(in == NULL){
-                write(sock,"\nUnable to open file\n",21);
+                struct invalid_request *current;
+                char current_ts[250];
+                //printf("\ncontent size:\"%d\"", size);
+                strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+                current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
+                strcpy(current->ip_address,ip);
+                strcpy(current->time_arrival,current_ts);
+                strcpy(current->content,content);
+                strcpy(current->last_modified,current_ts);
+                current->serverName=(char*)"Hello world muilti-thread server";
+                current->msg = (char*)"\nUnable to open file\n";
+                current->tail = NULL;
+                queue_err_feedback(current);
                 return 2;//no file
             }
             strtok(dir,".");
@@ -409,7 +467,20 @@ req_parser(char buffer[]){
             //printf("\ncame to here");
             //printf("\ntype: \"%s\"",type);
             if(type==NULL){
-                write(sock,"\nunsuportted file type\n",23);
+                //write(sock,"\nunsuportted file type\n",23);
+                struct invalid_request *current;
+                char current_ts[250];
+                //printf("\ncontent size:\"%d\"", size);
+                strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+                current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
+                strcpy(current->ip_address,ip);
+                strcpy(current->time_arrival,current_ts);
+                strcpy(current->content,content);
+                strcpy(current->last_modified,current_ts);
+                current->serverName=(char*)"Hello world muilti-thread server";
+                current->msg = (char*)"\nCan't read file type from request\n";
+                current->tail = NULL;
+                queue_err_feedback(current);
                 return 3; // unsuportted file
             }
             if(strcmp(type,"html")==0){
@@ -417,7 +488,20 @@ req_parser(char buffer[]){
             }else if(strcmp(type,"gif")==0){
                 type = (char*)"image/gif";
             }else{
-                write(sock,"\nunsuportted file type\n",23);
+                //write(sock,"\nunsuportted file type\n",23);
+                struct invalid_request *current;
+                char current_ts[250];
+                //printf("\ncontent size:\"%d\"", size);
+                strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+                current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
+                strcpy(current->ip_address,ip);
+                strcpy(current->time_arrival,current_ts);
+                strcpy(current->content,content);
+                strcpy(current->last_modified,current_ts);
+                current->serverName=(char*)"Hello world muilti-thread server";
+                current->msg = (char*)"\nFile type is not supported...\n";
+                current->tail = NULL;
+                queue_err_feedback(current);
                 return 3;//no file
             }
             fseek(in, 0, SEEK_END); // seek to end of file
@@ -431,6 +515,8 @@ req_parser(char buffer[]){
             new_request = (struct request *)malloc(sizeof(struct request));
             new_request->content_size = size;
             new_request->content_type = type;
+            strcpy(new_request->ip,ip);
+            strcpy(new_request->content,content);
             strcpy(new_request->file_dir,temp);
             strcpy(new_request->last_modified ,current_ts);
             new_request->serverName=(char*)"Hello world muilti-thread server";
@@ -453,7 +539,20 @@ req_parser(char buffer[]){
             enqueue(new_request);
         }else{
             // wrong request type
-            write(sock,"\nwrong request type\n",20);
+            struct invalid_request *current;
+            char current_ts[250];
+            //printf("\ncontent size:\"%d\"", size);
+            strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+            current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
+            strcpy(current->ip_address,ip);
+            strcpy(current->time_arrival,current_ts);
+            strcpy(current->content,content);
+            strcpy(current->time_arrival,current_ts);
+            strcpy(current->last_modified,current_ts);
+            current->serverName=(char*)"Hello world muilti-thread server";
+            current->msg = (char*)"\nOnly GET and HEAD request can be accepted...\n";
+            current->tail = NULL;
+            queue_err_feedback(current);
             return 1;// 1 is the err code for req_parser can't find correct tyoe
         }
     }
@@ -498,8 +597,18 @@ int request_handler(struct request *rq){
             printf("Oh dear, something went wrong with sendfile()! %s\n", strerror(errno));
         }
         write(sock,"\n------------------------------\n",32);
+        char log_buf[3000];
+        sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",rq->ip,rq->time_arrival,rq->last_modified,rq->content,200,rq->content_size);
+        file_log(log_buf);
+        if(debugging){
+            fprintf(stderr,"%s",log_buf);
+            fprintf(stderr,"\n");
+        }
+
         fclose(in);
-        free(rq);
+        if(rq != NULL) {
+            free(rq);
+        }
         return 0;
     }else if(strcmp(rq->request_type,"HEAD")==0){
         // HEAD response
@@ -521,8 +630,17 @@ int request_handler(struct request *rq){
         write(sock,"Content Length: ",16);
         write(sock,length_buffer,strlen(length_buffer));
         write(sock,"\n",1);
+        char log_buf[3000];
+        sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",rq->ip,rq->time_arrival,rq->last_modified,rq->content,200,rq->content_size);
+        file_log(log_buf);
+        if(debugging){
+            fprintf(stderr,"%s",log_buf);
+            fprintf(stderr,"\n");
+        }
         fclose(in);
-        free(rq);
+        if(rq != NULL) {
+            free(rq);
+        }
         return 0;
     }
     return -1;
@@ -575,6 +693,47 @@ void get_shortest_job(){
     }
     ready_rq = shortest;
     strcpy(ready_rq->last_modified, current_ts);
+}
+void send_err_feedback(){
+    if(errhead == NULL){}//nothing
+    else {
+        while (NULL != errhead->tail) {
+            if (errhead != NULL) {
+                write(sock, "\n", 1);
+                write(sock, "Hello world muilti-thread server\n", 33);
+                write(sock, "HTTP/1.1 400 ERROR\n", 19);
+                write(sock, "Last Modified: ", 15);
+                write(sock, errhead->last_modified, strlen(errhead->last_modified));
+                write(sock, "\nERROR: ", 8);
+                write(sock, errhead->msg, strlen(errhead->msg));
+                write(sock, "\n", 1);
+                write(sock, "Content: ", 9);
+                write(sock, errhead->content, strlen(errhead->content));
+                write(sock, "\n", 1);
+            }
+            errhead = errhead->tail;
+        }
+    }
+}
+void queue_err_feedback(struct invalid_request *rq){
+    if(errhead == NULL ){
+        errhead = rq;
+    }else{
+        struct invalid_request *temp = errhead;
+        while(NULL!=temp->tail){
+            temp = temp->tail;
+        }
+        temp->tail = rq;
+    }
+
+}
+void file_log(char *info){
+    if(log_file!=NULL){
+        FILE *out = fopen(log_file,"a");
+        fprintf(out,"%s",info);
+        fprintf(out,"\n");
+        fclose(out);
+    }
 }
 /*
  * usage - print usage string and exit
