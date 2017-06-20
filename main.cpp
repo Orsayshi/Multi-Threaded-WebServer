@@ -3,6 +3,7 @@
 //
 #define	BUF_LEN	8192
 
+#include <dirent.h>
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<string.h>
@@ -79,6 +80,7 @@ struct invalid_request
     char time_arrival[250];
     char *serverName;
     char *msg;
+    char index[5000] = "";
     char content[300];
     char last_modified[250];
     struct invalid_request *tail;
@@ -452,12 +454,29 @@ req_parser(char buffer[], char ip[]){
                 //printf("\ncontent size:\"%d\"", size);
                 strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
                 current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
+                DIR  *d;
+                struct dirent *dire;
+                d = opendir(root);
+                if (d)
+                {
+                    while ((dire = readdir(d)) != NULL)
+                    {
+                        char check[100];
+                        strcpy(check,dire->d_name);
+                        if(check[0]!='.') {
+                            strcat(dire->d_name, "\n");
+                            strcat(current->index, dire->d_name);
+                        }
+                    }
+                    closedir(d);
+                }
                 strcpy(current->ip_address,ip);
                 strcpy(current->time_arrival,current_ts);
                 strcpy(current->content,content);
                 strcpy(current->last_modified,current_ts);
                 current->serverName=(char*)"Hello world muilti-thread server";
                 current->msg = (char*)"\nUnable to open file\n";
+
                 current->tail = NULL;
                 queue_err_feedback(current);
                 return 2;//no file
@@ -710,6 +729,18 @@ void send_err_feedback(){
                 write(sock, "Content: ", 9);
                 write(sock, errhead->content, strlen(errhead->content));
                 write(sock, "\n", 1);
+                if(strlen(errhead->index) > 0){
+                    write(sock, "Directory: ", 11);
+                    write(sock, errhead->index, strlen(errhead->index));
+                    write(sock, "\n", 1);
+                }
+                char log_buf[3000];
+                sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",errhead->ip_address,errhead->time_arrival,errhead->last_modified,errhead->content,404,0);
+                file_log(log_buf);
+                if(debugging){
+                    fprintf(stderr,"%s",log_buf);
+                    fprintf(stderr,"\n");
+                }
             }
             errhead = errhead->tail;
         }
