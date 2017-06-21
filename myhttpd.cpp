@@ -526,9 +526,9 @@ req_parser(char buffer[], char ip[]){
                 queue_err_feedback(current);
                 return 3; // unsuportted file
             }
-            if(strcmp(type,"html")==0){
+            if(strcmp(type,"html")==0||strcmp(type,"txt")==0){
                 type = (char*)"text/html";
-            }else if(strcmp(type,"gif")==0){
+            }else if(strcmp(type,"gif")==0||strcmp(type,"jpg")==0){
                 type = (char*)"image/gif";
             }else{
                 //write(sock,"\nunsuportted file type\n",23);
