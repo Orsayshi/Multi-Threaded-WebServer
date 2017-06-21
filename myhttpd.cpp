@@ -340,7 +340,7 @@ void *scheduling(void *nptr){
                 }
             }
             if (!NOT_FCFS) {
-                fprintf(stderr,"here 1\n");
+                //fprintf(stderr,"here 1\n");
                 while (head != NULL) {
                     sem_wait(sem);
                     ready_rq = NULL;
@@ -365,7 +365,7 @@ void *scheduling(void *nptr){
                     sleep(1);
                 }
             } else {
-                fprintf(stderr,"here 2\n");
+                //fprintf(stderr,"here 2\n");
                 while (head != NULL) {
                     sem_wait(sem);
                     ready_rq = NULL;
@@ -472,7 +472,7 @@ req_parser(char buffer[], char ip[]){
 //            strcat(temp,dir);
 
             //fprintf(stderr,"\ntemp: \"%s\"",temp);
-            in = fopen(temp,"r");//in read mode
+            in = fopen(temp,"rb");//in read mode
             if(in == NULL){
                 struct invalid_request *current;
                 char current_ts[250];
@@ -622,7 +622,7 @@ int request_handler(struct request *rq){
         // GET response
         FILE* in;
         //get file by directory, since the directory is already checked in parser function, no need re-check here
-        in = fopen(rq->file_dir,"r");
+        in = fopen(rq->file_dir,"rb");
         char length_buffer[20];
         //strcpy(rq->last_modified ,current_ts);
         sprintf(length_buffer,"%d",rq->content_size); // convert int to char
@@ -671,7 +671,7 @@ int request_handler(struct request *rq){
         char accessed[250];
         strftime(changed,sizeof(changed),"[%d/%b/%Y %H:%M:%S]",localtime(&(meta.st_ctime)));
         strftime(accessed,sizeof(accessed),"[%d/%b/%Y %H:%M:%S]",localtime(&(meta.st_atime)));
-        in = fopen(rq->file_dir,"r");
+        in = fopen(rq->file_dir,"rb");
         char length_buffer[20];
         char blocksize_buffer[20];
         char block_buffer[20];
