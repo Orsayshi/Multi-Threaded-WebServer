@@ -23,7 +23,7 @@
 #include	<inttypes.h>
 
 
-char *progname;
+char *progname;       // actually using this variable
 char buf[BUF_LEN];
 
 struct request
@@ -68,7 +68,13 @@ void queue_err_feedback(struct invalid_request *rq);
 int req_parser(char buffer[], char ip[]);
 int request_handler(struct request *rq);
 
-int s, sock, ch, server, done, bytes, aflg;
+int s;
+int sock;
+int ch;
+int server;
+int done;
+int bytes;
+int aflg;
 int soctype = SOCK_STREAM;
 int queuing_time = 60;
 int threads = 4;
@@ -91,12 +97,12 @@ pthread_mutex_t output_lock=PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 
 // all flags
-int debugging = 0;
+int debugging = 0;        // actually being used
 int NOT_FCFS = 0;
 
 
 
-extern char *optarg;
+extern char *optarg;      // actually being used
 extern int optind;
 
 int
@@ -115,25 +121,48 @@ main(int argc,char *argv[]) {
                 // Set the queuing time to time seconds. The default should be 60 seconds
 
                 // make sure the arg is an integer
-                queuing_time = atoi(optarg);
+                if(atoi(optarg) != 0){
+                  queuing_time = atoi(optarg);
+                }
+                else{
+                  perror("Invalid Argument To Queuing Time");
+                  exit(1);
+                }
                 break;
             case 'p':
                 // Listen on the given port. If not provided, myhttpd will listen on port 8080.
-                port = optarg;
+                if(atoi(optarg) != 0){
+                  port = optarg;
+                }
+                else{
+                  perror("Invalid Argument To Port Number");
+                  exit(1);
+                }
                 break;
             case 'n':
                 /*
                  * Set number of threads waiting ready in the execution thread pool to threadnum.
                  * The default should be 4 execution threads.
                  */
-                // syntax check needed here
-                threads = atoi(optarg);
+                if(atoi(optarg) != 0){
+                  threads = atoi(optarg);
+                }
+                else{
+                  perror("Invalid Argument To Thread Number");
+                  exit(1);
+                }
                 break;
             case 's':
                 // Set the scheduling policy. It can be either FCFS or SJF. The default will be FCFS.
-                mode = optarg;
-                if (strcmp(mode, "SJF") == 0) {
+                if((strcmp(optarg, "SJF") == 0) || (strcmp(optarg, "FCFS") == 0)){
+                  mode = optarg;
+                  if (strcmp(mode, "SJF") == 0) {
                     NOT_FCFS = 1;
+                  }
+                }
+                else{
+                  perror("Invalid Argument To Scheduling Policy");
+                  exit(1);
                 }
                 break;
             case 'h':
@@ -160,7 +189,7 @@ main(int argc,char *argv[]) {
                     fprintf(stderr,"Unvalid working directory %s\n",root);
                     root = getcwd(dir_buf,1000);
                 }
-                fprintf(stderr,"Current working dircetory is %s\n",getcwd(dir_buf,1000));
+                fprintf(stderr,"Current working directory is %s\n",getcwd(dir_buf,1000));
                 break;
             default:
                 usage();
@@ -271,7 +300,7 @@ setup_server() {
     memset((void *)&serv, 0, sizeof(serv));
     serv.sin_family = AF_INET;
     if (port == NULL)
-        serv.sin_port = htons(0);
+        serv.sin_port = htons(8080);
     else if (isdigit(*port))
         serv.sin_port = htons(atoi(port));
     else {
