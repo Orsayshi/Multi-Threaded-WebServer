@@ -1,0 +1,5 @@
+all: myhttpd.cpp
+                   cc -O myhttpd.cpp -o myhttpd -pthread
+
+clean:
+           $(RM)myhttpd 

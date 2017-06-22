@@ -1,5 +1,6 @@
-all:
-	g++ main.cpp -o myhttpd
+all: myhttpd.cpp
+	gcc -O myhttpd.cpp -o myhttpd -pthread
 
 clean:
-	rm myhttpd
+	$(RM) myhttpd
+
