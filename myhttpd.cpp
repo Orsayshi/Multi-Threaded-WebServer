@@ -445,9 +445,6 @@ req_parser(char buffer[], char ip[]){
     }
     if(Request_type == NULL){
         struct invalid_request *current;
-        char current_ts[250];
-        //printf("\ncontent size:\"%d\"", size);
-        strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
         current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
         strcpy(current->ip_address,ip);
         strcpy(current->content,content);
@@ -475,9 +472,6 @@ req_parser(char buffer[], char ip[]){
             in = fopen(temp,"rb");//in read mode
             if(in == NULL){
                 struct invalid_request *current;
-                char current_ts[250];
-                //printf("\ncontent size:\"%d\"", size);
-                strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
                 current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
                 DIR  *d;
                 struct dirent *dire;
@@ -503,6 +497,7 @@ req_parser(char buffer[], char ip[]){
                 current->msg = (char*)"\nUnable to open file\n";
                 current->tail = NULL;
                 queue_err_feedback(current);
+                //fprintf(stderr,"hit~\n");
                 return 2;//no file
             }
             strtok(dir,".");
@@ -512,9 +507,6 @@ req_parser(char buffer[], char ip[]){
             if(type==NULL){
                 //write(sock,"\nunsuportted file type\n",23);
                 struct invalid_request *current;
-                char current_ts[250];
-                //printf("\ncontent size:\"%d\"", size);
-                strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
                 current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
                 strcpy(current->ip_address,ip);
                 strcpy(current->time_arrival,current_ts);
@@ -533,9 +525,6 @@ req_parser(char buffer[], char ip[]){
             }else{
                 //write(sock,"\nunsuportted file type\n",23);
                 struct invalid_request *current;
-                char current_ts[250];
-                //printf("\ncontent size:\"%d\"", size);
-                strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
                 current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
                 strcpy(current->ip_address,ip);
                 strcpy(current->time_arrival,current_ts);
@@ -586,9 +575,6 @@ req_parser(char buffer[], char ip[]){
         }else{
             // wrong request type
             struct invalid_request *current;
-            char current_ts[250];
-            //printf("\ncontent size:\"%d\"", size);
-            strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
             current = (struct invalid_request *)malloc(sizeof(struct invalid_request));
             strcpy(current->ip_address,ip);
             strcpy(current->time_arrival,current_ts);
@@ -786,7 +772,8 @@ void get_shortest_job(){
 void send_err_feedback(){
     if(errhead == NULL){}//nothing
     else {
-        while (NULL != errhead->tail) {
+
+        while (NULL != errhead) {
             if (errhead != NULL) {
                 trash=write(sock, "\n", 1);
                 trash=write(sock, "Hello world muilti-thread server\n", 33);
@@ -819,6 +806,7 @@ void send_err_feedback(){
 void queue_err_feedback(struct invalid_request *rq){
     if(errhead == NULL ){
         errhead = rq;
+        //fprintf(stderr,"now errhead: %s\n",errhead->content);
     }else{
         struct invalid_request *temp = errhead;
         while(NULL!=temp->tail){
