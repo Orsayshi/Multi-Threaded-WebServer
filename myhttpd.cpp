@@ -23,7 +23,7 @@
 #include	<inttypes.h>
 
 
-char *progname;       // actually using this variable
+char *progname;
 char buf[BUF_LEN];
 
 struct request
@@ -54,8 +54,7 @@ struct invalid_request
 };
 
 void usage();
-int setup_client();
-int setup_server();
+void setup_server();
 void *scheduling(void *);
 void *servicing(void *);
 void *listenning(void *);
@@ -97,12 +96,12 @@ pthread_mutex_t output_lock=PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 
 // all flags
-int debugging = 0;        // actually being used
+int debugging = 0;
 int NOT_FCFS = 0;
 
 
 
-extern char *optarg;      // actually being used
+extern char *optarg;
 extern int optind;
 
 int
@@ -211,11 +210,11 @@ main(int argc,char *argv[]) {
 //    if (!server)
 //        sock = setup_client();
 //    else
-    sock = setup_server();
+    setup_server();
 /*
  * Set up service thread and scheduler thread
  */
-    sem_init(sem,0,threads);
+/*    sem_init(sem,0,threads);
     //sem = sem_open("service",0,threads);
     pthread_t services[threads];
     for (int i = 0; i < threads; i++) {
@@ -226,6 +225,8 @@ main(int argc,char *argv[]) {
     pthread_create(&listen_id, NULL, listenning, NULL);
     pthread_join(listen_id, NULL);
     pthread_join(scheduler_id, NULL);
+
+  */
     exit(0);
 }
 void *listenning(void *nulptr){
@@ -290,8 +291,7 @@ void *listenning(void *nulptr){
  * setup_server() - set up socket for mode of soc running as a server.
  */
 
-int
-setup_server() {
+void setup_server() {
     struct sockaddr_in serv, remote;
     struct servent *se;
     //    int newsock, len;
@@ -320,12 +320,12 @@ setup_server() {
     }
     fprintf(stderr, "Port number is %d\n", ntohs(remote.sin_port));
     listen(s, 1);
-    newsock = s;
-    if (soctype == SOCK_STREAM) {
-        fprintf(stderr, "Entering accept() waiting for connection.\n");
-        newsock = accept(s, (struct sockaddr *) &remote, &len);
+    while(1){
+      if (soctype == SOCK_STREAM) {
+          fprintf(stderr, "Entering accept() waiting for connection.\n");
+          newsock = accept(s, (struct sockaddr *) &remote, &len);
+      }
     }
-    return(newsock);
 }
 /*
  * servicing method, working on request
