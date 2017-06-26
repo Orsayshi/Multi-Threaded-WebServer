@@ -78,10 +78,11 @@ int threads = 4;
 char *mode;
 char *log_file = NULL;
 char dir_buf[1000];
+char original[1000];
 char hostname[128];
 char *host = NULL;
 char *port = NULL;
-char *root = getcwd(dir_buf,1000);
+char *root = getcwd(original,1000);
 sem_t *sem = (sem_t *)malloc(sizeof(sem_t *));
 ssize_t trash = 0;
 struct request *head = NULL;
@@ -109,7 +110,7 @@ main(int argc,char *argv[]) {
         progname = argv[0];
     else
         progname++;
-    while ((ch = getopt(argc, argv, "dt:p:n:s:hr:l:")) != -1)
+    while ((ch = getopt(argc, argv, "dhl:p:r:t:n:s:")) != -1)
         switch (ch) {
             case 'd':
                 // entering the debug mode
@@ -152,9 +153,9 @@ main(int argc,char *argv[]) {
                 break;
             case 's':
                 // Set the scheduling policy. It can be either FCFS or SJF. The default will be FCFS.
-                if((strcmp(optarg, "SJF") == 0) || (strcmp(optarg, "FCFS") == 0)){
+                if((strcasecmp(optarg, "SJF") == 0) || (strcasecmp(optarg, "FCFS") == 0)){
                   mode = optarg;
-                  if (strcmp(mode, "SJF") == 0) {
+                  if (strcasecmp(mode, "SJF") == 0) {
                     NOT_FCFS = 1;
                   }
                 }
@@ -216,7 +217,7 @@ main(int argc,char *argv[]) {
         pthread_create(&services[i], NULL, &servicing, NULL);
         counter++;
         if(debugging){
-          fprintf(stdout,"counter: %d\n", counter);
+          fprintf(stdout,"# of Thread activited: %d\n", counter);
         }
         // create threads pool
     }
@@ -446,15 +447,22 @@ req_parser(char buffer[], char ip[]){
     }
     char temp[1300];
     char dir_1[1300];
-    strcpy(temp,root);
     if(dir != NULL){
-        strcpy(dir_1,dir);
-        if(dir_1[0]=='~'){
+        if(dir[0]=='~'){
             dir = dir +1;// move one bit
             strcpy(dir_1,dir);
+            strcpy(temp,original);
             strncat(temp,dir_1,strlen(dir_1)+strlen(temp)+1);
-        }else{
-            strcpy(temp,dir);
+            if(debugging) {
+                fprintf(stderr, "directory: %s\n", temp);
+            }
+        } else{
+            strcpy(dir_1,dir);
+            strcpy(temp,root);
+            strncat(temp,dir_1,strlen(dir_1)+strlen(temp)+1);
+            if(debugging) {
+                fprintf(stderr, "directory: %s\n", temp);
+            }
         }
     }
     char *type;
@@ -487,7 +495,7 @@ req_parser(char buffer[], char ip[]){
             Request_type = Request_type +1;
         }
         // printf("\nRequest_type: \"%s\"",Request_type);
-        if(strcmp(Request_type,"GET")==0 || strcmp(Request_type,"HEAD")==0){
+        if(strcasecmp(Request_type,"GET")==0 || strcasecmp(Request_type,"HEAD")==0){
             // printf("\nck 2");
 //            char *temp = (char *)malloc(strlen(dir)+strlen(def)+1);
 //            strcpy(temp,def);
@@ -631,12 +639,13 @@ int request_handler(struct request *rq){
     sprintf(length_buffer,"%d",rq->content_size); // convert int to char
     trash=write(sock,"HTTP/1.0 200 OK\n",16);
     trash=write(sock,"Date: ",6);
-    trash=write(sock,current_ts,30);
+    trash=write(sock,current_ts,strlen(current_ts));
     trash=write(sock,"\nServer: ",9);
-    trash=write(sock,hostname,128);
+    trash=write(sock,hostname,strlen(hostname));
     trash=write(sock,"\nLast-Modified: ",16);
     trash=write(sock,rq->last_modified,strlen(rq->last_modified));
-    trash=write(sock,"\nContent-Type: text/html\n",25);
+    trash=write(sock,"\nContent-Type: \n",15);
+    trash=write(sock,rq->content_type,strlen(rq->content_type));
     trash=write(sock,"Content-Length: ",16);
     trash= write(sock,length_buffer,strlen(length_buffer));
     trash=write(sock,"\n\n",2);
@@ -646,10 +655,10 @@ int request_handler(struct request *rq){
       fclose(in);
     }
     trash=write(sock,"\n",1);
-    if(close(sock) < 0){
-      perror("Close Socket");
-      exit(1);
-    }
+//    if(close(sock) < 0){
+//      perror("Close Socket");
+//      exit(1);
+//    }
     char log_buf[3000];
     sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",rq->ip,rq->time_arrival,rq->scheduled,rq->content,200,rq->content_size);
     file_log(log_buf);
@@ -731,7 +740,7 @@ void send_err_feedback(){
           if(errhead != NULL) {
             trash=write(sock, "HTTP/1.0 404 Not Found",22);
             trash=write(sock, "\nServer: ",9);
-            trash=write(sock, hostname, 128);
+            trash=write(sock, hostname, strlen(hostname));
             trash=write(sock, "\nLast Modified: ", 16);
             trash=write(sock, errhead->last_modified, strlen(errhead->last_modified));
             trash=write(sock, "\nERROR: ", 8);
@@ -787,6 +796,7 @@ void
 usage()
 {
     // change this to new usage
+    fprintf(stderr, "%s myhttpd [-d] [-h] [-l file] [-p port] [-r dir] [-t time] [-n threadnum] [-s sched]\n",progname);
     fprintf(stderr, "usage: %s −d : Enter debugging mode. That is, do not daemonize, only accept one connection at a\n"
                     "                    time and enable logging to stdout. Without this option, the web server should run\n"
                     "                    as a daemon process in the background.\n", progname);
