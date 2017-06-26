@@ -9,6 +9,7 @@ static char svnid[] = "$Id: soc.c 6 2009-07-03 03:18:54Z kensmith $";
 
 #define	BUF_LEN	8192
 
+#include	<unistd.h>
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<string.h>
