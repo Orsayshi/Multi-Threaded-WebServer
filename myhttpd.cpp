@@ -12,13 +12,13 @@
 #include	<sys/types.h>
 #include	<sys/socket.h>
 #include	<netdb.h>
-#include    <getopt.h>
-#include    <time.h>
-#include    <errno.h>
-#include    <sys/stat.h>
-#include    <pthread.h>
-#include    <semaphore.h>
-#include    <sys/sendfile.h>
+#include  <getopt.h>
+#include  <time.h>
+#include  <errno.h>
+#include  <sys/stat.h>
+#include  <pthread.h>
+#include  <semaphore.h>
+#include  <sys/sendfile.h>
 #include	<netinet/in.h>
 #include	<inttypes.h>
 
@@ -28,10 +28,9 @@ char buf[BUF_LEN];
 
 struct request
 {
-    char ip[300];
+    char ip[21];
     char *request_type;
     char time_arrival[250];
-    char *serverName;
     int  content_size;
     char content[601];
     char file_dir[601];
@@ -43,9 +42,8 @@ struct request
 
 struct invalid_request
 {
-    char ip_address[300];
+    char ip_address[21];
     char time_arrival[250];
-    char *serverName;
     char *msg;
     char index[5000];
     char content[300];
@@ -54,11 +52,10 @@ struct invalid_request
 };
 
 void usage();
-int setup_client();
 int setup_server();
 void *scheduling(void *);
 void *servicing(void *);
-void *listenning(void *);
+void *listening(void *);
 void enqueue(struct request *rq);
 void get_shortest_job();
 int queue_size();
@@ -81,6 +78,7 @@ int threads = 4;
 char *mode;
 char *log_file = NULL;
 char dir_buf[1000];
+char hostname[128];
 char *host = NULL;
 char *port = NULL;
 char *root = getcwd(dir_buf,1000);
@@ -131,7 +129,7 @@ main(int argc,char *argv[]) {
                 break;
             case 'p':
                 // Listen on the given port. If not provided, myhttpd will listen on port 8080.
-                if(atoi(optarg) != 0){
+                if(atoi(optarg) >= 0){
                   port = optarg;
                 }
                 else{
@@ -144,7 +142,7 @@ main(int argc,char *argv[]) {
                  * Set number of threads waiting ready in the execution thread pool to threadnum.
                  * The default should be 4 execution threads.
                  */
-                if(atoi(optarg) != 0){
+                if(atoi(optarg) >= 2){
                   threads = atoi(optarg);
                 }
                 else{
@@ -195,12 +193,9 @@ main(int argc,char *argv[]) {
                 usage();
         }
     argc -= optind; // reduces the argument number by optind
-    if (argc != 0)
+    if (argc != 0) {
         usage();
-//    if (!server && (host == NULL || port == NULL))
-//        usage();
-//    if (server && host != NULL)
-//        usage();
+    }
 /*
  * Create socket on local host.
  */
@@ -208,27 +203,31 @@ main(int argc,char *argv[]) {
         perror("socket");
         exit(1);
     }
-//    if (!server)
-//        sock = setup_client();
-//    else
+
     sock = setup_server();
-/*
- * Set up service thread and scheduler thread
- */
+    /*
+    * Set up service thread and scheduler thread
+    */
     sem_init(sem,0,threads);
     //sem = sem_open("service",0,threads);
     pthread_t services[threads];
+    int counter = 1;
     for (int i = 0; i < threads; i++) {
         pthread_create(&services[i], NULL, &servicing, NULL);
+        counter++;
+        if(debugging){
+          fprintf(stdout,"counter: %d\n", counter);
+        }
         // create threads pool
     }
     pthread_create(&scheduler_id, NULL, scheduling, NULL);
-    pthread_create(&listen_id, NULL, listenning, NULL);
+    pthread_create(&listen_id, NULL, listening, NULL);
     pthread_join(listen_id, NULL);
     pthread_join(scheduler_id, NULL);
     exit(0);
+
 }
-void *listenning(void *nulptr){
+void *listening(void *nulptr){
 /*
  * Set up select(2) on both socket and terminal, anything that comes
  * in on socket goes to terminal, anything that gets typed on terminal
@@ -237,13 +236,11 @@ void *listenning(void *nulptr){
     (void) nulptr;
     fd_set ready;
     struct sockaddr_in msgfrom;
-//    int msgsize;
     socklen_t msgsize;
     union {
         uint32_t addr;
         char bytes[4];
     } fromaddr;
-    //printf("listenning\n");
     while (!done) {
         FD_ZERO(&ready);
         FD_SET(sock, &ready);
@@ -268,13 +265,7 @@ void *listenning(void *nulptr){
                         0xff & (unsigned int)fromaddr.bytes[2],
                         0xff & (unsigned int)fromaddr.bytes[3]);
             }
-            //cwrite(fileno(stdout), buf, bytes);
-           // buf[bytes - 1] = '\0';
-           // printf("current:--------%s---------\n",buf);
-//            if(strcasecmp((char *)buf,"exit")==0){
-//                exit(1);
-//            }
-            char ip[300];
+            char ip[21];
             fromaddr.addr = ntohl(msgfrom.sin_addr.s_addr);
             sprintf(ip, "%d.%d.%d.%d: ", 0xff & (unsigned int)fromaddr.bytes[0],
                     0xff & (unsigned int)fromaddr.bytes[1],
@@ -286,16 +277,13 @@ void *listenning(void *nulptr){
     return(0);
 }
 
-/*
- * setup_server() - set up socket for mode of soc running as a server.
- */
 
-int
-setup_server() {
+
+int setup_server() {
     struct sockaddr_in serv, remote;
     struct servent *se;
-    //    int newsock, len;
     socklen_t newsock, len;
+    int pid = 0;
     len = sizeof(remote);
     memset((void *)&serv, 0, sizeof(serv));
     serv.sin_family = AF_INET;
@@ -316,6 +304,11 @@ setup_server() {
     }
     if (getsockname(s, (struct sockaddr *) &remote, &len) < 0) {
         perror("getsockname");
+        exit(1);
+    }
+    hostname[127] = '\0';
+    if (gethostname(hostname, 127) < 0) {
+        perror("gethostname");
         exit(1);
     }
     fprintf(stderr, "Port number is %d\n", ntohs(remote.sin_port));
@@ -346,14 +339,14 @@ void *servicing(void * pointer){
      }
 }
 /*
- * schduling method, assign quest to worker
+ * scheduling method, assign quest to worker
  *
  */
 void *scheduling(void *nptr){
     (void *)nptr;
     if(head == NULL){
         if(debugging) {
-            fprintf(stderr, "\nNo avaliable request detected...\n");
+            fprintf(stdout, "\nNo available request detected...\n");
         }
         send_err_feedback();
     }
@@ -361,11 +354,11 @@ void *scheduling(void *nptr){
             sleep(queuing_time);
             if (head == NULL) {
                 if(debugging) {
-                    fprintf(stderr, "\nNo avaliable request detected...\n");
+                    fprintf(stdout, "\nNo available request detected...\n");
                 }
             } else {
                 if(debugging) {
-                    fprintf(stderr, "\nwaiting finished, start scheduled...\n");
+                    fprintf(stdout, "\nWaiting finished, start scheduled...\n");
                 }
             }
             if (!NOT_FCFS) {
@@ -377,14 +370,14 @@ void *scheduling(void *nptr){
                     pthread_mutex_lock(&queue_lock);
                     time_t now;
                     time(&now);
-                    struct tm *Current = localtime(&now);
-                    char current_ts[250];
+                    struct tm *Current = gmtime(&now);
+                    char current_ts[30];
                     //printf("\ncontent size:\"%d\"", size);
-                    strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+                    strftime(current_ts, 30, "%a, %d %b %Y %T GMT", Current);
                     ready_rq = head;
                     strcpy(ready_rq->scheduled, current_ts);
                     if(debugging){
-                        fprintf(stderr,"Reqiest start to escheduled, scheduled time : %s \n",ready_rq->scheduled);
+                        fprintf(stdout,"Request start to scheduled, scheduled time : %s \n",ready_rq->scheduled);
                     }
                     // ready holds the scheduled request ready to assign to service
                     head = head->tail;
@@ -411,7 +404,7 @@ void *scheduling(void *nptr){
             }
             send_err_feedback();
         if(debugging) {
-            fprintf(stderr, "\nQueue gets empty...\n");
+            fprintf(stderr, "\nQueue gets emptied...\n");
         }
         }
 }
@@ -430,7 +423,7 @@ void enqueue(struct request *rq){
         temp->tail = rq;
     }
     if(debugging) {
-        fprintf(stderr, "\nnew request added, now size is: %d \n", queue_size());
+        fprintf(stdout, "New request added, now size is: %d \n", queue_size());
     }
 }
 /*
@@ -440,13 +433,17 @@ void enqueue(struct request *rq){
 int
 req_parser(char buffer[], char ip[]){
     if(debugging) {
-        fprintf(stderr, "\nNew Request detected, start parsing process....");
+        fprintf(stdout, "New Request detected, start parsing process....\n");
     }
     FILE *in;
     char content[300];
     strcpy(content,buffer);
     char *Request_type = strtok(buffer," ");
     char *dir = strtok(NULL," ");
+    if(debugging) {
+        fprintf(stdout, "Request_Type: %s\n", Request_type);
+        fprintf(stdout, "dir: %s\n", dir);
+    }
     char temp[1300];
     char dir_1[1300];
     strcpy(temp,root);
@@ -463,10 +460,10 @@ req_parser(char buffer[], char ip[]){
     char *type;
     time_t now;
     time(&now);
-    struct tm * Current=localtime(&now);
-    char current_ts[250];
+    struct tm * Current=gmtime(&now);
+    char current_ts[30];
     //printf("\ncontent size:\"%d\"", size);
-    strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+    strftime(current_ts, 30, "%a, %d %b %Y %T GMT", Current);
     //fprintf(stderr,"\ntime stamp:\"%s\"", current_ts);
     //printf("\nck 1");
     if(Request_type == NULL){
@@ -479,8 +476,7 @@ req_parser(char buffer[], char ip[]){
         strcpy(current->content,content);
         strcpy(current->time_arrival,current_ts);
         strcpy(current->last_modified,current_ts);
-        current->serverName=(char*)"Hello world muilti-thread server";
-        current->msg = (char*)"\nUnsuportted request type\n";
+        current->msg = (char*)"\nUnsupported request type\n";
         current->tail = NULL;
         queue_err_feedback(current);
         //write(sock,"\nunsuportted request type\n",26);
@@ -522,7 +518,6 @@ req_parser(char buffer[], char ip[]){
                 strcpy(current->time_arrival,current_ts);
                 strcpy(current->content,content);
                 strcpy(current->last_modified,current_ts);
-                current->serverName=(char*)"Hello world muilti-thread server";
                 current->msg = (char*)"\nUnable to open file\n";
                 current->tail = NULL;
                 queue_err_feedback(current);
@@ -541,7 +536,6 @@ req_parser(char buffer[], char ip[]){
                 strcpy(current->time_arrival,current_ts);
                 strcpy(current->content,content);
                 strcpy(current->last_modified,current_ts);
-                current->serverName=(char*)"Hello world muilti-thread server";
                 current->msg = (char*)"\nCan't read file type from request\n";
                 current->tail = NULL;
                 queue_err_feedback(current);
@@ -559,7 +553,6 @@ req_parser(char buffer[], char ip[]){
                 strcpy(current->time_arrival,current_ts);
                 strcpy(current->content,content);
                 strcpy(current->last_modified,current_ts);
-                current->serverName=(char*)"Hello world muilti-thread server";
                 current->msg = (char*)"\nFile type is not supported...\n";
                 current->tail = NULL;
                 queue_err_feedback(current);
@@ -570,8 +563,8 @@ req_parser(char buffer[], char ip[]){
             fclose(in);
             struct stat meta;
             stat(temp,&meta);
-            char modified[250];
-            strftime(modified,sizeof(modified),"[%d/%b/%Y %H:%M:%S]",localtime(&(meta.st_mtime)));
+            char modified[30];
+            strftime(modified,sizeof(modified),"%a, %d %b %Y %T GMT",gmtime(&(meta.st_mtime)));
             struct request *new_request;
             new_request = (struct request *)malloc(sizeof(struct request));
             new_request->content_size = size;
@@ -580,7 +573,6 @@ req_parser(char buffer[], char ip[]){
             strcpy(new_request->content,content);
             strcpy(new_request->file_dir,temp);
             strcpy(new_request->last_modified ,modified);
-            new_request->serverName=(char*)"Hello world muilti-thread server";
             strcpy(new_request->time_arrival , current_ts);
             new_request->request_type = Request_type;
             new_request->tail = NULL;
@@ -591,14 +583,14 @@ req_parser(char buffer[], char ip[]){
 //            free(def);
 //            free(temp);
             if(debugging) {
-                fprintf(stderr, "\nRequest_type: \"%s\"", new_request->request_type);
-                fprintf(stderr, "\nRequest content_size: \"%d\"", new_request->content_size);
-                fprintf(stderr, "\nRequest content_type: \"%s\"", new_request->content_type);
-                fprintf(stderr, "\nRequest file_dir: \"%s\"", new_request->file_dir);
-                fprintf(stderr, "\nRequest last_modified: \"%s\"", new_request->last_modified);
-                fprintf(stderr, "\nRequest serverName: \"%s\"", new_request->serverName);
-                fprintf(stderr, "\nRequest time_arrival: \"%s\"", new_request->time_arrival);
-                fprintf(stderr, "\n");
+                fprintf(stdout, "\nRequest_type: \"%s\"", new_request->request_type);
+                fprintf(stdout, "\nRequest content_size: \"%d\"", new_request->content_size);
+                fprintf(stdout, "\nRequest content_type: \"%s\"", new_request->content_type);
+                fprintf(stdout, "\nRequest file_dir: \"%s\"", new_request->file_dir);
+                fprintf(stdout, "\nRequest last_modified: \"%s\"", new_request->last_modified);
+                fprintf(stdout, "\nRequest serverName: \"%s\"", (char *)hostname);
+                fprintf(stdout, "\nRequest time_arrival: \"%s\"", new_request->time_arrival);
+                fprintf(stdout, "\n");
             }
             enqueue(new_request);
         }else{
@@ -610,7 +602,6 @@ req_parser(char buffer[], char ip[]){
             strcpy(current->content,content);
             strcpy(current->time_arrival,current_ts);
             strcpy(current->last_modified,current_ts);
-            current->serverName=(char*)"Hello world muilti-thread server";
             current->msg = (char*)"\nWrong request! Only GET and HEAD request can be accepted.(if you get content:ET or EA, it means you send empty request)\n";
             current->tail = NULL;
             //fprintf(stderr,"\n-------------%s--------------\n",Request_type);
@@ -626,116 +617,51 @@ int request_handler(struct request *rq){
     char buf [200];
     time_t now;
     time(&now);
-    struct tm * Current=localtime(&now);
-    char current_ts[250];
+    struct tm * Current=gmtime(&now);
+    char current_ts[30];
     //printf("\ncontent size:\"%d\"", size);
-    strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+    strftime(current_ts, 30, "%a, %d %b %Y %T GMT", Current);
     if(rq == NULL){
         return -1;
     }
-    if(strcmp(rq->request_type,"GET")==0){
         // GET response
-        FILE* in;
         //get file by directory, since the directory is already checked in parser function, no need re-check here
-        in = fopen(rq->file_dir,"rb");
-        char length_buffer[20];
+    char length_buffer[20];
         //strcpy(rq->last_modified ,current_ts);
-        sprintf(length_buffer,"%d",rq->content_size); // convert int to char
-        trash=write(sock,"\n",1);
-        trash=write(sock,"Hello world muilti-thread server\n",33);
-        trash=write(sock,"HTTP/1.1 200 OK\n",16);
-        trash=write(sock,"Last Modified: ",15);
-        trash=write(sock,rq->last_modified,strlen(rq->last_modified));
-        trash=write(sock,"\nContent-Type: text/html\n",24);
-        trash=write(sock,"\n",1);
-        trash=write(sock,"Content Length: ",16);
-        trash= write(sock,length_buffer,strlen(length_buffer));
-        trash=write(sock,"\n",1);
-        trash=write(sock,"------------------------------\n",31);
-        int check =sendfile(sock,fileno(in),NULL,sizeof(buf)); //one for linux
-        //int check = sendfile(fileno(in),sock,0,(off_t *)length_buffer,NULL,0); // this one only work under mac OS
-//        if(check!=0){
-//            if(debugging) {
-//                fprintf(stderr, "Oh dear, something went wrong with sendfile()! %s\n", strerror(errno));
-//            }
-//            return -1;
-//        }
-        trash=write(sock,"\n",1);
-        trash=write(sock,"------------------------------\n",31);
-        trash=write(sock,"\n",1);
-        char log_buf[3000];
-        sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",rq->ip,rq->time_arrival,rq->scheduled,rq->content,200,rq->content_size);
-        file_log(log_buf);
-        if(debugging){
-            fprintf(stderr,"%s",log_buf);
-            fprintf(stderr,"\n");
-        }
-
-        fclose(in);
-        if(rq != NULL) {
-            free(rq);
-        }
-        return 0;
-    }else if(strcmp(rq->request_type,"HEAD")==0){
-        // HEAD response
-        FILE* in;
-        //get file by directory, since the directory is already checked in parser function, no need re-check here
-        struct stat meta;
-        stat(rq->file_dir,&meta);
-        char changed[250];
-        char accessed[250];
-        strftime(changed,sizeof(changed),"[%d/%b/%Y %H:%M:%S]",localtime(&(meta.st_ctime)));
-        strftime(accessed,sizeof(accessed),"[%d/%b/%Y %H:%M:%S]",localtime(&(meta.st_atime)));
-        in = fopen(rq->file_dir,"rb");
-        char length_buffer[20];
-        char blocksize_buffer[20];
-        char block_buffer[20];
-        char inode_buffer[20];
-        char link_buffer[20];
-        //strcpy(rq->last_modified ,current_ts);
-        sprintf(length_buffer,"%d",rq->content_size);
-        sprintf(blocksize_buffer,"%d",(int)meta.st_blksize);
-        sprintf(block_buffer,"%d",(int)meta.st_blocks);
-        sprintf(inode_buffer,"%d",(int)meta.st_ino);
-        sprintf(link_buffer,"%d",(int)meta.st_nlink);
-        trash=write(sock,"\n",1);
-        trash=write(sock,"Hello world muilti-thread server\n",33);
-        trash=write(sock,"HTTP/1.1 200 OK\n",16);
-        trash=write(sock,"Date: ",6);
-        trash=write(sock,rq->time_arrival,strlen(rq->time_arrival));
-        trash=write(sock,"\nLast Accessed: ",16);
-        trash=write(sock,accessed,strlen(accessed));
-        trash=write(sock,"\nLast Changed: ",15);
-        trash=write(sock,changed,strlen(changed));
-        trash=write(sock,"\nLast Modified: ",16);
-        trash=write(sock,rq->last_modified,strlen(rq->last_modified));
-        trash=write(sock,"\nBlock Size: ",13);
-        trash=write(sock,blocksize_buffer,strlen(blocksize_buffer));
-        trash=write(sock,"\nBlock: ",7);
-        trash=write(sock,block_buffer,strlen(block_buffer));
-        trash=write(sock,"\nInode: ",7);
-        trash=write(sock,inode_buffer,strlen(inode_buffer));
-        trash=write(sock,"\nlink: ",7);
-        trash=write(sock,link_buffer,strlen(link_buffer));
-        trash=write(sock,"\nContent-Type: text/html\n",24);
-        trash=write(sock,"\n",1);
-        trash=write(sock,"Content Length: ",16);
-        trash=write(sock,length_buffer,strlen(length_buffer));
-        trash=write(sock,"\n",1);
-        char log_buf[3000];
-        sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",rq->ip,rq->time_arrival,rq->scheduled,rq->content,200,rq->content_size);
-        file_log(log_buf);
-        if(debugging){
-            fprintf(stderr,"%s",log_buf);
-            fprintf(stderr,"\n");
-        }
-        fclose(in);
-        if(rq != NULL) {
-            free(rq);
-        }
-        return 0;
+    sprintf(length_buffer,"%d",rq->content_size); // convert int to char
+    trash=write(sock,"HTTP/1.0 200 OK\n",16);
+    trash=write(sock,"Date: ",6);
+    trash=write(sock,current_ts,30);
+    trash=write(sock,"\nServer: ",9);
+    trash=write(sock,hostname,128);
+    trash=write(sock,"\nLast-Modified: ",16);
+    trash=write(sock,rq->last_modified,strlen(rq->last_modified));
+    trash=write(sock,"\nContent-Type: text/html\n",25);
+    trash=write(sock,"Content-Length: ",16);
+    trash= write(sock,length_buffer,strlen(length_buffer));
+    trash=write(sock,"\n\n",2);
+    if(strcmp(rq->request_type,"GET")==0){
+      FILE* in = fopen(rq->file_dir,"rb");
+      int check =sendfile(sock,fileno(in),NULL,sizeof(buf)); //one for linux
+      fclose(in);
     }
-    return -1;
+    trash=write(sock,"\n",1);
+    if(close(sock) < 0){
+      perror("Close Socket");
+      exit(1);
+    }
+    char log_buf[3000];
+    sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",rq->ip,rq->time_arrival,rq->scheduled,rq->content,200,rq->content_size);
+    file_log(log_buf);
+    if(debugging){
+        fprintf(stdout,"%s",log_buf);
+        fprintf(stdout,"\n");
+    }
+
+    if(rq != NULL) {
+        free(rq);
+    }
+    return 0;
 }
 /*
  * helper function
@@ -785,51 +711,51 @@ void get_shortest_job(){
     }
     time_t now;
     time(&now);
-    struct tm *Current = localtime(&now);
-    char current_ts[250];
-    //printf("\ncontent size:\"%d\"", size);
-    strftime(current_ts, 250, "[%d/%b/%Y %H:%M:%S]", Current);
+    struct tm *Current = gmtime(&now);
+    char current_ts[30];
+    strftime(current_ts, 30, "%a, %d %b %Y %T GMT", Current);
     ready_rq = head;
     strcpy(shortest->scheduled, current_ts);
     if(debugging){
-        fprintf(stderr,"Reqiest start to escheduled, scheduled time : %s \n",shortest->scheduled);
+        fprintf(stdout,"Request start to be scheduled, scheduled time : %s \n",shortest->scheduled);
     }
     ready_rq = shortest;
 
     //strcpy(ready_rq->last_modified, current_ts);
 }
 void send_err_feedback(){
+
     if(errhead == NULL){}//nothing
     else {
-
-        while (NULL != errhead) {
-            if (errhead != NULL) {
+      while(NULL != errhead){
+          if(errhead != NULL) {
+            trash=write(sock, "HTTP/1.0 404 Not Found",22);
+            trash=write(sock, "\nServer: ",9);
+            trash=write(sock, hostname, 128);
+            trash=write(sock, "\nLast Modified: ", 16);
+            trash=write(sock, errhead->last_modified, strlen(errhead->last_modified));
+            trash=write(sock, "\nERROR: ", 8);
+            trash=write(sock, errhead->msg, strlen(errhead->msg));
+            trash=write(sock, "\n", 1);
+            trash=write(sock, "Content: ", 9);
+            trash=write(sock, errhead->content, strlen(errhead->content));
+            trash=write(sock, "\n", 1);
+            if(strlen(errhead->index) > 0){
+                trash=write(sock, "Directory: ", 11);
+                trash=write(sock, errhead->index, strlen(errhead->index));
                 trash=write(sock, "\n", 1);
-                trash=write(sock, "Hello world muilti-thread server\n", 33);
-                trash=write(sock, "HTTP/1.1 400 ERROR\n", 19);
-                trash=write(sock, "Last Modified: ", 15);
-                trash=write(sock, errhead->last_modified, strlen(errhead->last_modified));
-                trash=write(sock, "\nERROR: ", 8);
-                trash=write(sock, errhead->msg, strlen(errhead->msg));
-                trash=write(sock, "\n", 1);
-                trash=write(sock, "Content: ", 9);
-                trash=write(sock, errhead->content, strlen(errhead->content));
-                trash=write(sock, "\n", 1);
-                if(strlen(errhead->index) > 0){
-                    trash=write(sock, "Directory: ", 11);
-                    trash=write(sock, errhead->index, strlen(errhead->index));
-                    trash=write(sock, "\n", 1);
-                }
-                char log_buf[3000];
-                sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",errhead->ip_address,errhead->time_arrival,errhead->last_modified,errhead->content,404,0);
-                file_log(log_buf);
-                if(debugging){
-                    fprintf(stderr,"%s",log_buf);
-                    fprintf(stderr,"\n");
-                }
             }
-            errhead = errhead->tail;
-        }
+            char log_buf[3000];
+            sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",errhead->ip_address,errhead->time_arrival,errhead->last_modified,errhead->content,404,0);
+            file_log(log_buf);
+            if(debugging){
+                fprintf(stderr,"%s",log_buf);
+                fprintf(stderr,"\n");
+            }
+          }
+          errhead = errhead->tail;
+      }
+
     }
 }
 void queue_err_feedback(struct invalid_request *rq){
