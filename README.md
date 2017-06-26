@@ -50,9 +50,40 @@ this can be enabled by providing the -l flag to the command line arguments.
 
 
 Example Usage:
-    server                                client
+    server                                      client
 I:  ./myhttpd
-O:  
+O:  Port number is 8080
+    Entering accept() waiting for connection.
+
+// Server waits for client to connect.
+
+I:                                              // run client program creating a
+                                                // socket bound to port number 8080
+                                                // that attempts to connect to the
+                                                // server
+// Server accepts client connection.
+O:                                              Connected...
+
+I:                                              GET /index.html HTTP/1.0
+// Server reads request, places it into a queue, then services the request and writes
+// a response to the client.
+O:                                              HTTP/1.0 200 OK
+                                                Date: Thu, 06 Nov 2008 18:27:13 GMT
+                                                Server: Apache
+                                                Last-Modified: Wed, 06 Nov 2008 18:27:13 GMT
+                                                Content-Type: text/html
+                                                Content-Length: 1000 bytes
+
+                                                <!DOCTYPE html>
+                                                    <head> /*Document Header*/ </head>
+                                                    <body>
+                                                        // content of body
+                                                    </body>
+                                                </html>
+
+// Server closes the connection
+
+O:                                              Connection Closed...
 
 
 Synopsis:
