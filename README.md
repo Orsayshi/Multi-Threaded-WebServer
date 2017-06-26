@@ -51,8 +51,8 @@ this can be enabled by providing the -l flag to the command line arguments.
 
 Example Usage:
     server                                      client
-I:  ./myhttpd
-O:  Port number is 8080
+I:  `./myhttpd`
+O:  `Port number is 8080`
     Entering accept() waiting for connection.
 
 // Server waits for client to connect.
@@ -152,9 +152,9 @@ Flags:
                   first.
 
 How to compile:
-Tpye "make" when terminal in code directory.And then run the program using: "./myhttpd"
+Tpye "make" when terminal in code directory.And then run the program using: "`./myhttpd`"
 
-You and add any argument for example:"./myhttpd -p 5000 -s SJF". So the port number will be set as 5000 and scheduling style will be Shortest job First.
+You and add any argument for example:"`./myhttpd -p 5000 -s SJF`". So the port number will be set as 5000 and scheduling style will be Shortest job First.
 
 Credits:
 Haoyu Guo - Primary Programmer
