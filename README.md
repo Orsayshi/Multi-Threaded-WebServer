@@ -152,15 +152,9 @@ Flags:
                   first.
 
 How to compile:
-Tpye "make" when terminal in code directory
+Tpye "make" when terminal in code directory.And then run the program using: "./myhttpd"
 
-And then run the program using: "./myhttpd"
-
-You and add any argument for example:
-
-"./myhttpd -p 5000 -s SJF"
-
-So the port number will be set as 5000 and scheduling style will be Shortest job First.
+You and add any argument for example:"./myhttpd -p 5000 -s SJF"So the port number will be set as 5000 and scheduling style will be Shortest job First.
 
 Credits:
 Haoyu Guo - Primary Programmer
