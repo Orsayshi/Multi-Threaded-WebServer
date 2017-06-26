@@ -23,7 +23,7 @@
 #include	<inttypes.h>
 
 
-char *progname;       // actually using this variable
+char *progname;
 char buf[BUF_LEN];
 
 struct request
@@ -52,7 +52,7 @@ struct invalid_request
 };
 
 void usage();
-int setup_server();
+void setup_server();
 void *scheduling(void *);
 void *servicing(void *);
 void *listening(void *);
@@ -62,8 +62,9 @@ int queue_size();
 void file_log(char *info);
 void send_err_feedback();
 void queue_err_feedback(struct invalid_request *rq);
-int req_parser(char buffer[], char ip[]);
+int req_parser(char ip[]);
 int request_handler(struct request *rq);
+void init_daemon();
 
 int s;
 int sock;
@@ -95,12 +96,12 @@ pthread_mutex_t output_lock=PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 
 // all flags
-int debugging = 0;        // actually being used
+int debugging = 0;
 int NOT_FCFS = 0;
 
 
 
-extern char *optarg;      // actually being used
+extern char *optarg;
 extern int optind;
 
 int
@@ -183,8 +184,8 @@ main(int argc,char *argv[]) {
             case 'r':
                 // Set the root directory for the http server to dir.
                 root = optarg;
-                if(chdir(root)<0){
-                    fprintf(stderr,"Unvalid working directory %s\n",root);
+                if((chroot(root)<0) || (chdir(root)<0)){
+                    fprintf(stderr,"Invalid Directory %s\n",root);
                     root = getcwd(dir_buf,1000);
                 }
                 fprintf(stderr,"Current working directory is %s\n",getcwd(dir_buf,1000));
@@ -196,36 +197,21 @@ main(int argc,char *argv[]) {
     if (argc != 0) {
         usage();
     }
-/*
- * Create socket on local host.
- */
+
+    if (debugging == 0) {
+      init_daemon();
+    }
+
+    /*
+     * Create socket on local host.
+     */
     if ((s = socket(AF_INET, soctype, 0)) < 0) {
         perror("socket");
         exit(1);
     }
 
-    sock = setup_server();
-    /*
-    * Set up service thread and scheduler thread
-    */
-    sem_init(sem,0,threads);
-    //sem = sem_open("service",0,threads);
-    pthread_t services[threads];
-    int counter = 1;
-    for (int i = 0; i < threads; i++) {
-        pthread_create(&services[i], NULL, &servicing, NULL);
-        counter++;
-        if(debugging){
-          fprintf(stdout,"counter: %d\n", counter);
-        }
-        // create threads pool
-    }
-    pthread_create(&scheduler_id, NULL, scheduling, NULL);
-    pthread_create(&listen_id, NULL, listening, NULL);
-    pthread_join(listen_id, NULL);
-    pthread_join(scheduler_id, NULL);
+    setup_server();
     exit(0);
-
 }
 void *listening(void *nulptr){
 /*
@@ -250,10 +236,11 @@ void *listening(void *nulptr){
             exit(1);
         }
         if (FD_ISSET(fileno(stdin), &ready)) {
-            if ((bytes = read(fileno(stdin), buf, BUF_LEN)) <= 0)
+            if ((bytes = read(fileno(stdin), buf, BUF_LEN)) <= 0){
                 done++;
-            send(sock, buf, bytes, 0);
+            }
         }
+
         msgsize = sizeof(msgfrom);
         if (FD_ISSET(sock, &ready)) {
             if ((bytes = recvfrom(sock, buf, BUF_LEN, 0, (struct sockaddr *)&msgfrom, &msgsize)) <= 0) {
@@ -271,19 +258,17 @@ void *listening(void *nulptr){
                     0xff & (unsigned int)fromaddr.bytes[1],
                     0xff & (unsigned int)fromaddr.bytes[2],
                     0xff & (unsigned int)fromaddr.bytes[3]);
-            req_parser(buf,ip);
+            req_parser(ip);
         }
     }
-    return(0);
 }
 
 
 
-int setup_server() {
+void setup_server() {
     struct sockaddr_in serv, remote;
     struct servent *se;
     socklen_t newsock, len;
-    int pid = 0;
     len = sizeof(remote);
     memset((void *)&serv, 0, sizeof(serv));
     serv.sin_family = AF_INET;
@@ -316,9 +301,25 @@ int setup_server() {
     newsock = s;
     if (soctype == SOCK_STREAM) {
         fprintf(stderr, "Entering accept() waiting for connection.\n");
-        newsock = accept(s, (struct sockaddr *) &remote, &len);
+        sem_init(sem,0,threads);
+        do {
+          sock = accept(s, (struct sockaddr *) &remote, &len);
+          /*
+          * Set up service thread and scheduler thread
+          */
+          //sem = sem_open("service",0,threads);
+
+          pthread_t services[threads];
+          for (int i = 1; i < threads; i++) {
+              pthread_create(&services[i], NULL, &servicing, NULL);
+              // create threads pool
+          }
+          pthread_create(&scheduler_id, NULL, scheduling, NULL);
+          pthread_create(&listen_id, NULL, listening, NULL);
+          pthread_join(listen_id, NULL);
+          pthread_join(scheduler_id, NULL);
+        } while(debugging == 0);
     }
-    return(newsock);
 }
 /*
  * servicing method, working on request
@@ -431,14 +432,14 @@ void enqueue(struct request *rq){
  *
  */
 int
-req_parser(char buffer[], char ip[]){
+req_parser(char ip[]){
     if(debugging) {
         fprintf(stdout, "New Request detected, start parsing process....\n");
     }
     FILE *in;
     char content[300];
-    strcpy(content,buffer);
-    char *Request_type = strtok(buffer," ");
+    strcpy(content,buf);
+    char *Request_type = strtok(buf," ");
     char *dir = strtok(NULL," ");
     if(debugging) {
         fprintf(stdout, "Request_Type: %s\n", Request_type);
@@ -745,6 +746,10 @@ void send_err_feedback(){
                 trash=write(sock, errhead->index, strlen(errhead->index));
                 trash=write(sock, "\n", 1);
             }
+            if(close(sock) < 0){
+              perror("Close Socket");
+              exit(1);
+            }
             char log_buf[3000];
             sprintf(log_buf,"%s - [%s] [%s] \"%s\" %d %d",errhead->ip_address,errhead->time_arrival,errhead->last_modified,errhead->content,404,0);
             file_log(log_buf);
@@ -783,9 +788,24 @@ void file_log(char *info){
  * usage - print usage string and exit
  */
 
-void
-usage()
-{
+ void init_daemon(){
+    pid_t pid, sid;
+    if((pid = fork()) < 0) {
+        perror("daemon\n");
+        exit(1);
+    }
+    if(pid > 0) {
+        exit(0);
+    }
+    umask(0);
+    sid = setsid();
+    if((chdir("/"))<0)  {
+        perror("daemon\n");
+        exit(1);
+    }
+ }
+
+void usage() {
     // change this to new usage
     fprintf(stderr, "usage: %s −d : Enter debugging mode. That is, do not daemonize, only accept one connection at a\n"
                     "                    time and enable logging to stdout. Without this option, the web server should run\n"

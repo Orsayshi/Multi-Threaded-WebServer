@@ -67,7 +67,7 @@ O:                                              Connected...
 I:                                              GET /index.html HTTP/1.0
 // Server reads request, places it into a queue, then services the request and writes
 // a response to the client.
-O:                                              HTTP/1.1 200 OK
+O:                                              HTTP/1.0 200 OK
                                                 Date: Thu, 06 Nov 2008 18:27:13 GMT
                                                 Server: Apache
                                                 Last-Modified: Wed, 06 Nov 2008 18:27:13 GMT
