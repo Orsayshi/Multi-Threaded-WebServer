@@ -122,6 +122,7 @@ main(int argc,char *argv[])
             write(fileno(stdout), buf, bytes);
         }
     }
+    fprintf(stderr, "Connection Closed");
     return(0);
 }
 
