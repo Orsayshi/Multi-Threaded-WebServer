@@ -5,9 +5,6 @@ Professor Tefvik Kosar
 
 a) Group Name: Hello World 
 Group Members: (3) 
-	1.Haoyugu@buffalo.edu  50087555
-	2.Justynth@buffalo.edu 50079794
-	3.Orkhiyae@buffalo.edu 50124821
 
 b) The data structure our team used is a linked list. The linked list stores the information of a given request. The data stored is associated with the content of the file, the time in which it has arrived and the size of the content. We then store data by adding the incoming data to the tail of the list. When schedule occurs for the FCFS we take the head of the list which is the first element that can be scheduled and it is then removed for the linked list. For SJF we check the content size of the file and which ever file has the smallest context size is the first element to be removed. 
 
