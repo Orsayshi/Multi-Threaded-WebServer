@@ -1,12 +1,7 @@
-# CSE_421_WebServer
+# Multi-Threaded-WebServer
 Project Name:
 Multi-threaded Web Server
 
-
-Authors:
-Haoyu Guo
-Or Khiyaev
-Justyn Thompson
 
 
 Project Description:
@@ -156,9 +151,3 @@ Tpye "make" when terminal in code directory.And then run the program using: "`./
 
 You and add any argument for example:"`./myhttpd -p 5000 -s SJF`". So the port number will be set as 5000 and scheduling style will be Shortest job First.
 
-Credits:
-Haoyu Guo - Primary Programmer
-
-Or Khiyaev - Testing and Analysis, Secondary Debugger
-
-Justyn Thompson - Secondary Programmer, Primary Debugger
